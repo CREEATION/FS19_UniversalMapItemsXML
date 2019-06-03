@@ -6,10 +6,24 @@
   <description>Makes Placeables single- and multiplayer compatible, automatically.</description>
   <iconFilename>modIcon.png</iconFilename>
 
-  <multiplayer supported="true" />
+  <!--
+  # CONFIG
+  define which farmIds you wish to take over in singleplayer.
+  copy and edit the "<singleplayer />" part into your maps modDesc.xml
+
+  default: "" (you don't own anything on first start)
+  possible values: `0-8`
+  examples:
+     takeOverFarmIds="0 1 2 3 4 5 6 7 8"    -> you own all placeables on the map
+     takeOverFarmIds="2 7 8"                -> you own all placeables which have their farmIds set to "2", "7" or "8"
+     takeOverFarmIds=""                     -> you don't own any placeables
+  ]]-->
+  <singleplayer takeOverFarmIds="0 1 2 3 4 5 6 7 8" />
 
   <extraSourceFiles>
     <sourceFile filename="UniversalMapItemsXML.lua" />
   </extraSourceFiles>
+
+  <multiplayer supported="false" />
 
 </modDesc>

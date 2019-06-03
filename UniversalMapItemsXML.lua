@@ -2,7 +2,7 @@
 
     @name Universal Map Items XML
     @description Makes Placeables single- and multiplayer compatible, automatically.
-    @release fs19-1.0
+    @release fs19-0.7a
 
     @author CREE7EN
     @copyright 2019 Thomas Creeten, CREEATION.de
@@ -14,17 +14,6 @@
 
 --]]
 
---- CONFIG
--- defines which farms one will own on first start in singleplayer
---
--- default: none (singleplayer doesn't own anything on first start)
--- possible values: `1-8`
--- examples:
---    { 1, 2, 3, 4, 5, 6, 7, 8 } -- you own all placeables on the map
---    { 2, 7, 8 } -- you own all placeables which have their farmIds set to `2`, `7` or `8`
---    {} -- you don't own any placeables
-local config_singleplayerOwnsPlaceablesWithFarmIds = {}
-
 --[[############################################################################
 
     CAUTION: there shouldn't be a reason to edit anything below.
@@ -34,23 +23,75 @@ local config_singleplayerOwnsPlaceablesWithFarmIds = {}
 
 ############################################################################--]]
 
+UniversalMapItemsXML = {}
+-- UniversalMapItemsXML.singleplayerOwnedFarmIds = {}
+UniversalMapItemsXML.enableDebugMode = false
+
+--- @TODO
+-- function UniversalMapItemsXML:configContainsFarmId( farmId )
+--   for _, configFarmId in ipairs( self.singleplayerOwnedFarmIds ) do
+--     if configFarmId == farmId then
+--       return true
+--     end
+--   end
+--
+--   return false
+-- end
+
+--- @TODO
+-- function UniversalMapItemsXML:deleteMap() end
+-- function UniversalMapItemsXML:loadMap()
+--   if self.enableDebugMode then
+--     g_logManager:info( "starting 'UniversalMapItemsXML.loadMap'... | UniversalMapItemsXML.lua" )
+--   end
+--
+--   local mapModDesc = loadXMLFile( 'modDesc', g_currentMission.baseDirectory .. 'modDesc.xml' )
+--   local configSingleplayerOwnedFarmIds = getXMLString( mapModDesc, 'modDesc.singleplayer#takeOverFarmIds' )
+--
+--   if configSingleplayerOwnedFarmIds ~= nil then
+--     if self.enableDebugMode then
+--       g_logManager:info( "found takeOverFarmIds: '%s' | UniversalMapItemsXML.lua", configSingleplayerOwnedFarmIds )
+--     end
+--
+--     for _, farmId in ipairs( StringUtil.splitString( ' ', configSingleplayerOwnedFarmIds ) ) do
+--       table.insert( self.singleplayerOwnedFarmIds, tonumber( farmId ) )
+--
+--       if self.enableDebugMode then
+--         g_logManager:info( "populating 'UniversalMapItemsXML.singleplayerOwnedFarmIds' with '%s' | UniversalMapItemsXML.lua", farmId )
+--       end
+--     end
+--
+--     if self.enableDebugMode then
+--       local strFarmIds = ''
+--
+--       for _, farmId in ipairs( self.singleplayerOwnedFarmIds ) do strFarmIds = strFarmIds .. '[' .. farmId .. ']' end
+--
+--       g_logManager:info( "populated 'UniversalMapItemsXML.singleplayerOwnedFarmIds' with '%s' | UniversalMapItemsXML.lua", strFarmIds )
+--     end
+--   end
+-- end
+
 --- hook into the function which places items after all necessary checks and adjust the `ownerFarmId` as needed
 -- @see https://gdn.giants-software.com/documentation_scripting_fs19.php?version=script&category=66&class=10359#finalizePlacement164130
 Placeable.finalizePlacement = Utils.overwrittenFunction(
   Placeable.finalizePlacement,
   function ( self, superFunc )
-    --- only do stuff if we're in singleplayer, as given `*items.xml` should already be multiplayer-compatible
-    if not g_currentMission.missionDynamicInfo.isMultiplayer then
-      --- check if any given farmId is out of range
+    if UniversalMapItemsXML.enableDebugMode then
+      g_logManager:info( "placed '%s' into the world... | UniversalMapItemsXML.lua", self.i3dFilename )
+    end
+
+    --- only do stuff if we're in singleplayer on first map start, as given `*items.xml` should already be multiplayer-compatible
+    if g_currentMission.missionInfo.isNewSPCareer then
       local farmIdsOutOfRange = {}
       local farmIdsOutOfRangeCount = 0
       local farmIdsTotalCount = 0
 
-      for _, farmId in pairs( config_singleplayerOwnsPlaceablesWithFarmIds ) do
+      --- check if any given farmId is out of range
+      for _, farmId in ipairs( UniversalMapItemsXML.singleplayerOwnedFarmIds ) do
         --- count how many farmIds are present in total
         farmIdsTotalCount = farmIdsTotalCount + 1
 
-        if farmId < 0 or farmId > 15 then
+        if farmId < FarmManager.SPECTATOR_FARM_ID or farmId > FarmManager.MAX_FARM_ID then
           table.insert( farmIdsOutOfRange, farmId )
           --- count how many farmIds are out of range
           farmIdsOutOfRangeCount = farmIdsOutOfRangeCount + 1
@@ -62,11 +103,11 @@ Placeable.finalizePlacement = Utils.overwrittenFunction(
         --- save out-of-range farmIds in a single string for warning output
         local strFarmIdsOutOfRange = ''
 
-        for _, farmIdOutOfRange in pairs( farmIdsOutOfRange ) do
+        for _, farmIdOutOfRange in ipairs( farmIdsOutOfRange ) do
           strFarmIdsOutOfRange = strFarmIdsOutOfRange .. '[' .. farmIdOutOfRange .. ']'
         end
 
-        g_logManager:warning( "FarmIDs '%s' out of range! Possible values: [0-15] | UniversalPlaceables.lua", strFarmIdsOutOfRange )
+        g_logManager:warning( "FarmIDs '%s' out of range! Possible values: [0-8] | UniversalMapItemsXML.lua", strFarmIdsOutOfRange )
 
         --- stop further custom script execution, proceed with original function
         return superFunc( self )
@@ -75,43 +116,39 @@ Placeable.finalizePlacement = Utils.overwrittenFunction(
       --- hold associated farmId of current placeable
       local ownerFarmId = self:getOwnerFarmId()
 
-      --- check if farmId of current placeable belongs to someone, but not everyone (e.g. `1-14`)
-      -- `AccessHandler.EVERYONE` = farmId `0`
-      -- `AccessHandler.NOBODY` = farmId `15`
-      if ownerFarmId ~= AccessHandler.EVERYONE and ownerFarmId ~= AccessHandler.NOBODY then
-        --- iterate over given farmIds and set ownership as defined per config (in `config_singleplayerOwnsPlaceablesWithFarmIds`)
-        for _, farmId in pairs( config_singleplayerOwnsPlaceablesWithFarmIds ) do
-          --- we found a match!
-          if ownerFarmId == farmId then
-            --- this placeable belongs to the singleplayer farmer now
-            self:setOwnerFarmId( FarmManager.SINGLEPLAYER_FARM_ID, true )
-            --- exit the loop for this placeable, as one placeable only has one farmId associated anyways
-            break
-          end
-        end
-
-        --- get the possibly new ownerFarmId
-        ownerFarmId = self:getOwnerFarmId()
-
-        --- check if the ownerFarmId isn't the singleplayer farmer already
-        -- edge case: also check if `config_singleplayerOwnsPlaceablesWithFarmIds` only contains `15` (e.g. `AccessHandler.NOBODY`),
-        --            because in this case no placeable should already be defined for the singleplayer farmer (`1`, which happens to be equal
-        --            to `FarmManager.SINGLEPLAYER_FARM_ID`) at all, so we proceed to set the ownerFarmId to `AccessHandler.NOBODY` here anyways
-        if ( farmIdsTotalCount == 1 and config_singleplayerOwnsPlaceablesWithFarmIds[1] == 15 ) or ownerFarmId ~= FarmManager.SINGLEPLAYER_FARM_ID then
-          --- and if it's not, set the ownership of this placeable to `AccessHandler.NOBODY` (e.g. `15`)
-          -- the placeable can now be bought as usual in singleplayer, because it wasn't defined in the config table
-          -- `config_singleplayerOwnsPlaceablesWithFarmIds` in the first place
-          self:setOwnerFarmId( AccessHandler.NOBODY, true )
-        end
+      if UniversalMapItemsXML.enableDebugMode then
+        g_logManager:info( "placeable ownerFarmId: '%s' | UniversalMapItemsXML.lua", tostring( ownerFarmId ) )
       end
 
-      -- FarmManager.SPECTATOR_FARM_ID :: 0
-      -- FarmManager.SINGLEPLAYER_FARM_ID :: 1
-      -- FarmManager.MAX_FARM_ID :: 8
-      -- FarmManager.INVALID_FARM_ID :: 15
-      -- FarmManager.MAX_NUM_FARMS :: 8
+      --- quickfix: set all farmIds to `1`, except those defined as `0` and `15`
+      if ownerFarmId ~= FarmManager.SINGLEPLAYER_FARM_ID and ownerFarmId ~= FarmManager.SPECTATOR_FARM_ID and ownerFarmId ~= FarmManager.INVALID_FARM_ID then
+        self:setOwnerFarmId( FarmManager.SINGLEPLAYER_FARM_ID, true )
+      end
 
-      -- DebugUtil.printTableRecursively( FarmlandManager )
+      --- iterate over given farmIds and set ownership as defined via config
+      -- @TODO
+      -- for _, farmId in ipairs( UniversalMapItemsXML.singleplayerOwnedFarmIds ) do
+      --   --- we found a match!
+      --   if ownerFarmId == farmId then
+      --     --- this placeable belongs to the singleplayer farmer now
+      --     self:setOwnerFarmId( FarmManager.SINGLEPLAYER_FARM_ID, true )
+      --
+      --     if UniversalMapItemsXML.enableDebugMode then
+      --       g_logManager:info( "set ownerFarmId to '%s' | UniversalMapItemsXML.lua", tostring( FarmManager.SINGLEPLAYER_FARM_ID ), self.i3dFilename )
+      --     end
+      --
+      --     --- exit the loop for this placeable, as one placeable only has one farmId associated anyways
+      --     break
+      --   --- if the placeable already has its farmId set to 1 but the config doesn't take over farmId 1, set it to 0
+      --   -- elseif ownerFarmId == FarmManager.SINGLEPLAYER_FARM_ID and UniversalMapItemsXML.configContainsFarmId( ownerFarmId )
+      --   -- @TODO check singleplayer modes / defaultFarmProperty in items.xml and farmlands.xml
+      --   end
+      -- end
+
+      if UniversalMapItemsXML.enableDebugMode then
+        g_logManager:info( "finished placeable '%s' (ownerFarmId: '%s') | UniversalMapItemsXML.lua", self.i3dFilename, tostring( self:getOwnerFarmId() ) )
+        print( '' )
+      end
 
       --- we're done here
       return superFunc( self )
@@ -119,17 +156,4 @@ Placeable.finalizePlacement = Utils.overwrittenFunction(
   end
 )
 
---- prevents spectator farm from getting money in singleplayer every hour
--- this is related to a warning that appears if one would add `farmId="0"` (e.g. `FarmManager.SPECTATOR_FARM_ID`) in their placeables XML file
--- (`farmId="0"` was possibly meant to be set to `15` instead)
-Placeable.hourChanged = Utils.overwrittenFunction(
-  Placeable.hourChanged,
-  function ( self, superFunc )
-    if not g_currentMission.missionDynamicInfo.isMultiplayer then
-      --- skip function execution if placeable belongs to spectator farm
-      if self:getOwnerFarmId() ~= FarmManager.SPECTATOR_FARM_ID then
-        superFunc( self )
-      end
-    end
-  end
-)
+-- addModEventListener( UniversalMapItemsXML )
