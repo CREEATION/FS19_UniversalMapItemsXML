@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<modDesc descVersion="43">
+
+  <title>Universal Map Items XML</title><version>fs19-1.0</version>
+  <author>CREE7EN</author>
+  <description>Makes Placeables single- and multiplayer compatible, automatically.</description>
+  <iconFilename>modIcon.png</iconFilename>
+
+  <multiplayer supported="true" />
+
+  <extraSourceFiles>
+    <sourceFile filename="UniversalMapItemsXML.lua" />
+  </extraSourceFiles>
+
+</modDesc>
